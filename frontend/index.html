@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rie Virtual Chat</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Config Panel -->
+        <div class="config-panel" id="configPanel">
+            <h2>⚙️ Configuration</h2>
+
+            <div class="form-group">
+                <label>LLM Provider</label>
+                <select id="provider">
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="custom">Custom (OpenAI-compatible)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="apiKey" placeholder="sk-...">
+            </div>
+
+            <div class="form-group" id="baseUrlGroup" style="display: none;">
+                <label>Base URL</label>
+                <input type="text" id="baseUrl" placeholder="https://api.example.com/v1">
+            </div>
+
+            <div class="form-group">
+                <label>Model</label>
+                <input type="text" id="model" value="gpt-3.5-turbo">
+            </div>
+
+            <div class="form-group">
+                <label>System Prompt</label>
+                <textarea id="systemPrompt"
+                    rows="4">You are Rie Kugimiya, a famous Japanese voice actress known for playing tsundere characters. You are cute, a bit sassy, but caring deep down. Respond naturally in casual conversation style.</textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Character Name</label>
+                <input type="text" id="characterName" value="Rie">
+            </div>
+
+            <button id="saveConfig" class="btn-primary">Save & Start Chat</button>
+        </div>
+
+        <!-- Chat Interface -->
+        <div class="chat-container" id="chatContainer" style="display: none;">
+            <div class="chat-header">
+                <h2 id="chatTitle">💬 Chat with Rie</h2>
+                <button id="showConfig" class="btn-secondary">⚙️</button>
+            </div>
+
+            <div class="messages" id="messages"></div>
+
+            <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                <span></span><span></span><span></span>
+            </div>
+
+            <div class="input-area">
+                <input type="text" id="userInput" placeholder="Type your message..." disabled>
+                <button id="sendBtn" class="btn-primary" disabled>Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/chat.js"></script>
+</body>
+
+</html>
