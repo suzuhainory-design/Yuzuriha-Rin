@@ -33,7 +33,7 @@ class RuleBasedSegmenter(BaseSegmenter):
 
     def __init__(self, max_length: int = 60):
         self.max_length = max_length
-        self.split_tokens = set("。，．,.！？!?；;—-－")
+        self.split_tokens = set("。，,！？!?")
 
     def segment(self, text: str) -> List[str]:
         """Segment text using punctuation boundaries and optional length guard."""
