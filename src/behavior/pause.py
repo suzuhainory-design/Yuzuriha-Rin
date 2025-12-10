@@ -3,6 +3,7 @@ Interval Prediction Module
 
 Generates random-but-bounded intervals between playback actions.
 """
+
 import random
 from .models import EmotionState
 
@@ -16,17 +17,17 @@ class PausePredictor:
             EmotionState.NEUTRAL: 1.0,
             EmotionState.HAPPY: 0.9,
             EmotionState.EXCITED: 0.8,
-            EmotionState.SAD: 1.2,
-            EmotionState.ANGRY: 0.9,
+            EmotionState.SAD: 1.4,
+            EmotionState.ANGRY: 0.7,
             EmotionState.ANXIOUS: 1.1,
-            EmotionState.CONFUSED: 1.1,
+            EmotionState.CONFUSED: 1.3,
         }
 
     def segment_interval(
         self,
         emotion: EmotionState = EmotionState.NEUTRAL,
-        min_duration: float = 0.4,
-        max_duration: float = 2.5,
+        min_duration: float = 0.8,
+        max_duration: float = 6.0,
         text_length: int = 0,
     ) -> float:
         """
@@ -48,7 +49,7 @@ class PausePredictor:
         multiplier = self.emotion_speed_multipliers.get(emotion, 1.0)
         interval = base * multiplier
 
-        length_bonus = min(max(text_length, 0) * 0.035, 5.0)
+        length_bonus = min(max(text_length, 0) * 0.04, 6.0)
         interval += length_bonus
 
         # Clamp to non-negative range

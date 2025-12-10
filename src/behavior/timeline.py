@@ -23,12 +23,14 @@ class TimelineBuilder:
 
         initial_delay = self._sample_initial_delay()
         if initial_delay > 0:
-            timeline.append(PlaybackAction(
-                type="wait",
-                duration=initial_delay,
-                timestamp=current_time,
-                metadata={"reason": "initial_delay"}
-            ))
+            timeline.append(
+                PlaybackAction(
+                    type="wait",
+                    duration=initial_delay,
+                    timestamp=current_time,
+                    metadata={"reason": "initial_delay"},
+                )
+            )
             current_time += initial_delay
 
         typing_active = False
@@ -40,31 +42,37 @@ class TimelineBuilder:
                 if not typing_active:
                     entry_delay = random.uniform(
                         self.config.entry_delay_min / 1000,
-                        self.config.entry_delay_max / 1000
+                        self.config.entry_delay_max / 1000,
                     )
                     if entry_delay > 0:
-                        timeline.append(PlaybackAction(
-                            type="wait",
-                            duration=entry_delay,
-                            timestamp=current_time,
-                            metadata={"reason": "typing_entry_delay"}
-                        ))
+                        timeline.append(
+                            PlaybackAction(
+                                type="wait",
+                                duration=entry_delay,
+                                timestamp=current_time,
+                                metadata={"reason": "typing_entry_delay"},
+                            )
+                        )
                         current_time += entry_delay
 
-                    timeline.append(PlaybackAction(
-                        type="typing_start",
-                        timestamp=current_time,
-                        metadata={"text_length": text_length}
-                    ))
+                    timeline.append(
+                        PlaybackAction(
+                            type="typing_start",
+                            timestamp=current_time,
+                            metadata={"text_length": text_length},
+                        )
+                    )
                     typing_active = True
 
                 if typing_lead_time > 0:
-                    timeline.append(PlaybackAction(
-                        type="wait",
-                        duration=typing_lead_time,
-                        timestamp=current_time,
-                        metadata={"reason": "typing_lead_time"}
-                    ))
+                    timeline.append(
+                        PlaybackAction(
+                            type="wait",
+                            duration=typing_lead_time,
+                            timestamp=current_time,
+                            metadata={"reason": "typing_lead_time"},
+                        )
+                    )
                     current_time += typing_lead_time
 
                 send_action = action.model_copy()
@@ -75,30 +83,32 @@ class TimelineBuilder:
                 keep_typing = text_length > 100 and next_is_send
 
                 if not keep_typing and typing_active:
-                    timeline.append(PlaybackAction(
-                        type="typing_end",
-                        timestamp=current_time,
-                        metadata={}
-                    ))
+                    timeline.append(
+                        PlaybackAction(
+                            type="typing_end", timestamp=current_time, metadata={}
+                        )
+                    )
                     typing_active = False
 
             elif action.type == "pause":
                 if action.duration > 0:
-                    timeline.append(PlaybackAction(
-                        type="wait",
-                        duration=action.duration,
-                        timestamp=current_time,
-                        metadata=action.metadata
-                    ))
+                    timeline.append(
+                        PlaybackAction(
+                            type="wait",
+                            duration=action.duration,
+                            timestamp=current_time,
+                            metadata=action.metadata,
+                        )
+                    )
                     current_time += action.duration
 
             elif action.type == "recall":
                 if typing_active:
-                    timeline.append(PlaybackAction(
-                        type="typing_end",
-                        timestamp=current_time,
-                        metadata={}
-                    ))
+                    timeline.append(
+                        PlaybackAction(
+                            type="typing_end", timestamp=current_time, metadata={}
+                        )
+                    )
                     typing_active = False
 
                 recall_action = action.model_copy()
@@ -106,11 +116,9 @@ class TimelineBuilder:
                 timeline.append(recall_action)
 
         if typing_active:
-            timeline.append(PlaybackAction(
-                type="typing_end",
-                timestamp=current_time,
-                metadata={}
-            ))
+            timeline.append(
+                PlaybackAction(type="typing_end", timestamp=current_time, metadata={})
+            )
 
         return timeline
 
@@ -120,45 +128,51 @@ class TimelineBuilder:
             return []
 
         cycles = random.randint(
-            self.config.hesitation_cycles_min,
-            self.config.hesitation_cycles_max
+            self.config.hesitation_cycles_min, self.config.hesitation_cycles_max
         )
 
         sequence = []
         for i in range(cycles):
-            typing_duration = random.randint(
-                self.config.hesitation_duration_min,
-                self.config.hesitation_duration_max
-            ) / 1000.0
-
-            sequence.extend([
-                PlaybackAction(
-                    type="typing_start",
-                    duration=0,
-                    metadata={"reason": "hesitation"}
-                ),
-                PlaybackAction(
-                    type="wait",
-                    duration=typing_duration,
-                    metadata={"reason": "hesitation"}
-                ),
-                PlaybackAction(
-                    type="typing_end",
-                    duration=0,
-                    metadata={"reason": "hesitation"}
+            typing_duration = (
+                random.randint(
+                    self.config.hesitation_duration_min,
+                    self.config.hesitation_duration_max,
                 )
-            ])
+                / 1000.0
+            )
+
+            sequence.extend(
+                [
+                    PlaybackAction(
+                        type="typing_start",
+                        duration=0,
+                        metadata={"reason": "hesitation"},
+                    ),
+                    PlaybackAction(
+                        type="wait",
+                        duration=typing_duration,
+                        metadata={"reason": "hesitation"},
+                    ),
+                    PlaybackAction(
+                        type="typing_end", duration=0, metadata={"reason": "hesitation"}
+                    ),
+                ]
+            )
 
             if i < cycles - 1 and random.random() < 0.3:
-                gap_duration = random.randint(
-                    self.config.hesitation_gap_min,
-                    self.config.hesitation_gap_max
-                ) / 1000.0
-                sequence.append(PlaybackAction(
-                    type="wait",
-                    duration=gap_duration,
-                    metadata={"reason": "hesitation_gap"}
-                ))
+                gap_duration = (
+                    random.randint(
+                        self.config.hesitation_gap_min, self.config.hesitation_gap_max
+                    )
+                    / 1000.0
+                )
+                sequence.append(
+                    PlaybackAction(
+                        type="wait",
+                        duration=gap_duration,
+                        metadata={"reason": "hesitation_gap"},
+                    )
+                )
 
         return sequence
 
@@ -169,22 +183,22 @@ class TimelineBuilder:
         if roll < self.config.initial_delay_weight_1:
             return random.uniform(
                 self.config.initial_delay_range_1_min,
-                self.config.initial_delay_range_1_max
+                self.config.initial_delay_range_1_max,
             )
         elif roll < self.config.initial_delay_weight_2:
             return random.uniform(
                 self.config.initial_delay_range_2_min,
-                self.config.initial_delay_range_2_max
+                self.config.initial_delay_range_2_max,
             )
         elif roll < self.config.initial_delay_weight_3:
             return random.uniform(
                 self.config.initial_delay_range_3_min,
-                self.config.initial_delay_range_3_max
+                self.config.initial_delay_range_3_max,
             )
         else:
             return random.uniform(
                 self.config.initial_delay_range_4_min,
-                self.config.initial_delay_range_4_max
+                self.config.initial_delay_range_4_max,
             )
 
     def _calculate_typing_lead_time(self, text_length: int) -> float:

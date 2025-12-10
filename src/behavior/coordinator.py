@@ -3,6 +3,7 @@ Behavior Coordinator
 
 Produces a one-shot playback sequence that mimics messaging apps such as WeChat.
 """
+
 from typing import List
 import uuid
 
@@ -31,7 +32,9 @@ class BehaviorCoordinator:
         self.pause_predictor = PausePredictor()
         self.timeline_builder = TimelineBuilder()
 
-    def process_message(self, text: str, emotion_map: dict | None = None) -> List[PlaybackAction]:
+    def process_message(
+        self, text: str, emotion_map: dict | None = None
+    ) -> List[PlaybackAction]:
         """
         Convert text into a playback sequence with timestamps.
         """
@@ -204,7 +207,9 @@ class BehaviorCoordinator:
         recall_actions.append(correction_action)
         return recall_actions
 
-    def _detect_emotion(self, text: str, emotion_map: dict | None = None) -> EmotionState:
+    def _detect_emotion(
+        self, text: str, emotion_map: dict | None = None
+    ) -> EmotionState:
         if not self.config.enable_emotion_detection:
             return EmotionState.NEUTRAL
         return self.emotion_detector.detect(emotion_map=emotion_map, fallback_text=text)

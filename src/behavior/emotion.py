@@ -4,6 +4,7 @@ Emotion interpretation module.
 Emotion data now comes from the LLM as a map of emotion -> intensity.
 We convert that structure into a primary EmotionState for downstream logic.
 """
+
 from typing import Dict
 
 from .models import EmotionState
@@ -34,7 +35,11 @@ class EmotionDetector:
         "caring": EmotionState.HAPPY,
     }
 
-    def detect(self, emotion_map: Dict[str, str] | None = None, fallback_text: str | None = None) -> EmotionState:
+    def detect(
+        self,
+        emotion_map: Dict[str, str] | None = None,
+        fallback_text: str | None = None,
+    ) -> EmotionState:
         """
         Convert an emotion map into a primary EmotionState.
 

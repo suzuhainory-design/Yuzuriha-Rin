@@ -3,6 +3,7 @@ Message Segmentation Module
 
 Provides interface for message segmentation with rule-based implementations.
 """
+
 from abc import ABC, abstractmethod
 from typing import List
 
