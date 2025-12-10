@@ -8,6 +8,7 @@ class ChatApp {
         this.localMessages = this.loadLocalMessages();
         this.lastSyncTimestamp = this.getLastSyncTimestamp();
         this.defaults = null;
+        this.emotionState = this.loadEmotionState();
 
         this.initElements();
         this.attachEventListeners();
@@ -48,6 +49,35 @@ class ChatApp {
         const key = `messages_${this.sessionId}`;
         const messages = Array.from(this.localMessages.values());
         localStorage.setItem(key, JSON.stringify(messages));
+    }
+
+    getEmotionStateKey() {
+        return `emotion_state_${this.sessionId}`;
+    }
+
+    loadEmotionState() {
+        const stored = localStorage.getItem(this.getEmotionStateKey());
+        if (!stored) return null;
+
+        try {
+            const parsed = JSON.parse(stored);
+            if (!parsed || !parsed.emotionMap) return null;
+            return parsed;
+        } catch (e) {
+            console.error('Failed to load emotion state:', e);
+            return null;
+        }
+    }
+
+    saveEmotionState(state) {
+        if (!state) return;
+        this.emotionState = state;
+        localStorage.setItem(this.getEmotionStateKey(), JSON.stringify(state));
+    }
+
+    clearEmotionState() {
+        this.emotionState = null;
+        localStorage.removeItem(this.getEmotionStateKey());
     }
 
     getLastSyncTimestamp() {
@@ -145,7 +175,9 @@ class ChatApp {
 
         if (this.emotionThemeToggle) {
             this.emotionThemeToggle.addEventListener('change', () => {
-                if (!this.emotionThemeToggle.checked) {
+                if (this.emotionThemeToggle.checked) {
+                    this.restoreEmotionTheme();
+                } else {
                     this.clearEmotionTheme();
                 }
             });
@@ -330,6 +362,8 @@ class ChatApp {
                 // this.showRecallNotice(true);
             }
         }
+
+        this.restoreEmotionTheme();
     }
 
     connectWebSocket() {
@@ -458,7 +492,7 @@ class ChatApp {
             this.messageRefs.set(data.id, messageDiv);
         }
 
-        if (role === 'assistant' && this.emotionThemeToggle?.checked) {
+        if (role === 'assistant') {
             this.applyEmotionFromMetadata(data.metadata);
         }
     }
@@ -514,6 +548,7 @@ class ChatApp {
         this.messagesDiv.innerHTML = '';
         this.lastSyncTimestamp = 0;
         this.saveLocalMessages();
+        this.clearEmotionTheme({ resetState: true });
     }
 
     addMessage(role, content, options = {}) {
@@ -657,24 +692,41 @@ class ChatApp {
     }
 
     applyEmotionFromMetadata(metadata) {
-        if (!metadata || !this.emotionThemeToggle?.checked) {
-            this.clearEmotionTheme();
+        if (!metadata) {
+            this.clearEmotionTheme({ resetState: true });
             return;
         }
 
         const emotionMap = metadata.emotion_map || metadata.emotionMap;
         if (!emotionMap || Object.keys(emotionMap).length === 0) {
-            this.clearEmotionTheme();
+            this.clearEmotionTheme({ resetState: true });
             return;
         }
 
         // Calculate mixed color based on all emotions and their intensities
         const mixedColor = this.mixEmotionColors(emotionMap);
-        
-        // Apply the mixed color to the glow effect
-        this.wechatShell.style.setProperty('--glow-base', mixedColor.base);
-        this.wechatShell.style.setProperty('--glow-shadow', mixedColor.shadow);
-        this.wechatShell.style.setProperty('--glow-shadow-soft', mixedColor.shadowSoft);
+
+        // Persist the last known emotion so it survives refreshes
+        this.saveEmotionState({
+            emotionMap,
+            colors: mixedColor,
+            updatedAt: Date.now()
+        });
+
+        // Only apply glow when the toggle is enabled
+        if (!this.emotionThemeToggle?.checked) {
+            return;
+        }
+
+        this.applyGlowColors(mixedColor);
+    }
+
+    applyGlowColors(colorSet) {
+        if (!this.wechatShell || !colorSet) return;
+
+        this.wechatShell.style.setProperty('--glow-base', colorSet.base);
+        this.wechatShell.style.setProperty('--glow-shadow', colorSet.shadow);
+        this.wechatShell.style.setProperty('--glow-shadow-soft', colorSet.shadowSoft);
         this.wechatShell.classList.add('glow-enabled');
     }
 
@@ -748,9 +800,60 @@ class ChatApp {
         };
     }
 
-    clearEmotionTheme() {
+    getLastEmotionFromMessages() {
+        const messages = Array.from(this.localMessages.values())
+            .sort((a, b) => b.timestamp - a.timestamp);
+
+        for (const msg of messages) {
+            const emotionMap = msg.metadata?.emotion_map || msg.metadata?.emotionMap;
+            if (emotionMap && Object.keys(emotionMap).length > 0) {
+                return {
+                    emotionMap,
+                    updatedAt: msg.timestamp ? msg.timestamp * 1000 : Date.now()
+                };
+            }
+        }
+
+        return null;
+    }
+
+    restoreEmotionTheme() {
+        if (!this.emotionThemeToggle?.checked) return;
+
+        if (!this.emotionState) {
+            this.emotionState = this.loadEmotionState();
+        }
+
+        let state = this.emotionState;
+
+        if (!state || !state.emotionMap) {
+            const fromMessages = this.getLastEmotionFromMessages();
+            if (fromMessages) {
+                const colors = this.mixEmotionColors(fromMessages.emotionMap);
+                state = {
+                    emotionMap: fromMessages.emotionMap,
+                    colors,
+                    updatedAt: fromMessages.updatedAt || Date.now()
+                };
+                this.saveEmotionState(state);
+            }
+        }
+
+        if (!state || !state.colors) return;
+
+        this.applyGlowColors(state.colors);
+    }
+
+    clearEmotionTheme(options = {}) {
         if (!this.wechatShell) return;
         this.wechatShell.classList.remove('glow-enabled');
+        this.wechatShell.style.removeProperty('--glow-base');
+        this.wechatShell.style.removeProperty('--glow-shadow');
+        this.wechatShell.style.removeProperty('--glow-shadow-soft');
+
+        if (options.resetState) {
+            this.clearEmotionState();
+        }
     }
 
     startStatusClock() {
