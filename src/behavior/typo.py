@@ -88,7 +88,7 @@ class TypoInjector:
 
         return False, None, None, None
 
-    def should_recall_typo(self, recall_rate: float = 0.4) -> bool:
+    def should_recall_typo(self, recall_rate: float = 0.75) -> bool:
         """Decide whether to recall and fix a typo."""
         return random.random() < recall_rate
 
@@ -204,8 +204,7 @@ class TypoInjector:
                 self._same_pinyin_finder = SamePinyinFinder()
         except Exception as exc:  # pragma: no cover - defensive logging
             unified_logger.warning(
-                f"Failed to init SamePinyinFinder: {exc}",
-                category=LogCategory.BEHAVIOR
+                f"Failed to init SamePinyinFinder: {exc}", category=LogCategory.BEHAVIOR
             )
             self._same_pinyin_finder = None
 

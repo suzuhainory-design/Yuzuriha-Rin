@@ -77,7 +77,7 @@ class BehaviorConfig(BaseModel):
 
     # Recall behavior
     enable_recall: bool = True
-    typo_recall_rate: float = 0.65  # 65% chance to recall and fix typo
+    typo_recall_rate: float = 0.75  # 75% chance to recall and fix typo
     recall_delay: float = 1.8  # Seconds before recalling
     retype_delay: float = 1.8  # Seconds before sending corrected version
 
