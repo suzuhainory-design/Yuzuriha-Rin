@@ -504,8 +504,31 @@ class ChatApp {
         const messages = Array.from(this.localMessages.values())
             .sort((a, b) => a.timestamp - b.timestamp);
 
+        let lastTimestamp = null;
+
         for (const msg of messages) {
             if (msg.type === 'text') {
+                // Check if we need to insert a time hint
+                // First message always shows time hint, others check time difference
+                if (lastTimestamp === null) {
+                    // First message - always show time hint
+                    const timeStr = this.formatTimestamp(msg.timestamp);
+                    this.addMessage('system', timeStr, {
+                        skipSave: true,
+                        skipIndicator: true
+                    });
+                } else {
+                    // Subsequent messages - check time difference
+                    const timeDiff = msg.timestamp - lastTimestamp;
+                    if (timeDiff > 5 * 60) { // 5 minutes in seconds
+                        const timeStr = this.formatTimestamp(msg.timestamp);
+                        this.addMessage('system', timeStr, {
+                            skipSave: true,
+                            skipIndicator: true
+                        });
+                    }
+                }
+
                 const role = msg.sender_id === 'user' ? 'user' : 'assistant';
                 const messageDiv = this.addMessage(role, msg.content, {
                     messageId: msg.id,
@@ -514,6 +537,7 @@ class ChatApp {
                     skipIndicator: true
                 });
                 this.messageRefs.set(msg.id, messageDiv);
+                lastTimestamp = msg.timestamp;
             } else if (msg.type === 'recall_event') {
                 // 撤回事件在历史消息中，直接删除被撤回的消息
                 const targetId = msg.metadata?.target_message_id;
@@ -658,6 +682,27 @@ class ChatApp {
         if (data.type === 'recall_event') {
             this.handleRecallEvent(data);
             return;
+        }
+
+        // Check if we need to insert a time hint before the new message
+        const lastMessageTimestamp = this.getLastVisibleMessageTimestamp();
+        if (lastMessageTimestamp === null) {
+            // First message - always show time hint
+            const timeStr = this.formatTimestamp(data.timestamp);
+            this.addMessage('system', timeStr, {
+                skipSave: true,
+                skipIndicator: true
+            });
+        } else if (lastMessageTimestamp !== data.timestamp) {
+            // Subsequent messages - check time difference
+            const timeDiff = data.timestamp - lastMessageTimestamp;
+            if (timeDiff > 5 * 60) { // 5 minutes in seconds
+                const timeStr = this.formatTimestamp(data.timestamp);
+                this.addMessage('system', timeStr, {
+                    skipSave: true,
+                    skipIndicator: true
+                });
+            }
         }
 
         // 处理普通文本消息
@@ -851,6 +896,27 @@ class ChatApp {
 
         const messageId = `msg-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
         const timestamp = Date.now() / 1000;
+
+        // Check if we need to insert a time hint before the user's message
+        const lastMessageTimestamp = this.getLastVisibleMessageTimestamp();
+        if (lastMessageTimestamp === null) {
+            // First message - always show time hint
+            const timeStr = this.formatTimestamp(timestamp);
+            this.addMessage('system', timeStr, {
+                skipSave: true,
+                skipIndicator: true
+            });
+        } else {
+            // Subsequent messages - check time difference
+            const timeDiff = timestamp - lastMessageTimestamp;
+            if (timeDiff > 5 * 60) { // 5 minutes in seconds
+                const timeStr = this.formatTimestamp(timestamp);
+                this.addMessage('system', timeStr, {
+                    skipSave: true,
+                    skipIndicator: true
+                });
+            }
+        }
 
         const localMsg = {
             id: messageId,
@@ -1455,6 +1521,61 @@ class ChatApp {
             console.error('Failed to delete avatar:', error);
             alert('删除失败，请重试');
         }
+    }
+
+    formatTimestamp(timestamp) {
+        const msgDate = new Date(timestamp * 1000);
+        const now = new Date();
+
+        // Get date strings without time for comparison
+        const msgDateStr = msgDate.toDateString();
+        const nowDateStr = now.toDateString();
+        const yesterdayDateStr = new Date(now.getTime() - 24 * 60 * 60 * 1000).toDateString();
+
+        // Format time as HH:MM (24-hour)
+        const hours = msgDate.getHours().toString().padStart(2, '0');
+        const minutes = msgDate.getMinutes().toString().padStart(2, '0');
+        const timeStr = `${hours}:${minutes}`;
+
+        // Check if today
+        if (msgDateStr === nowDateStr) {
+            return timeStr;
+        }
+
+        // Check if yesterday
+        if (msgDateStr === yesterdayDateStr) {
+            return `昨天 ${timeStr}`;
+        }
+
+        // Check if within 7 days (beyond yesterday)
+        const daysDiff = Math.floor((now.getTime() - msgDate.getTime()) / (24 * 60 * 60 * 1000));
+        if (daysDiff < 7) {
+            const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+            const weekDay = weekDays[msgDate.getDay()];
+            return `${weekDay} ${timeStr}`;
+        }
+
+        // Check if this year
+        const msgYear = msgDate.getFullYear();
+        const nowYear = now.getFullYear();
+        const month = (msgDate.getMonth() + 1).toString().padStart(2, '0');
+        const day = msgDate.getDate().toString().padStart(2, '0');
+
+        if (msgYear === nowYear) {
+            return `${month}-${day} ${timeStr}`;
+        }
+
+        // Different year
+        return `${msgYear}-${month}-${day} ${timeStr}`;
+    }
+
+    getLastVisibleMessageTimestamp() {
+        const messages = Array.from(this.localMessages.values())
+            .filter(msg => msg.type === 'text')
+            .sort((a, b) => a.timestamp - b.timestamp);
+
+        if (messages.length === 0) return null;
+        return messages[messages.length - 1].timestamp;
     }
 
 }
