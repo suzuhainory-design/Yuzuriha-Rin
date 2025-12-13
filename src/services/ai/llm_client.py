@@ -288,7 +288,7 @@ class LLMClient:
         """Build complete system prompt from behavior rules and character persona"""
 
         persona_section = ""
-        if self.config.persona:
+        if self.config.persona and self.config.persona.strip() != "":
             persona_section = f"\n角色设定：【{self.config.persona.strip()}】"
 
         additional_context = ""

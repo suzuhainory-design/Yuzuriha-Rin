@@ -13,10 +13,8 @@ class AppConfig(BaseSettings):
 
 
 class CharacterConfig(BaseSettings):
-    default_name: str = "小红"
-    default_persona: str = (
-        """你是一个叫小红的18岁女孩，性格活泼开朗，喜欢和用户聊天，帮助用户解决问题。你会根据用户的情绪调整你的回复风格，让对话更加自然有趣。"""
-    )
+    default_name: str = "新建角色"
+    default_persona: str = ""
 
     class Config:
         env_file = ".env"
