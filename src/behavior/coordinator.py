@@ -7,7 +7,12 @@ Produces a one-shot playback sequence that mimics messaging apps such as WeChat.
 from typing import List
 import uuid
 
-from src.behavior.models import BehaviorConfig, EmotionState, PlaybackAction, TimelineConfig
+from src.behavior.models import (
+    BehaviorConfig,
+    EmotionState,
+    PlaybackAction,
+    TimelineConfig,
+)
 from src.behavior.segmenter import SmartSegmenter
 from src.behavior.emotion import EmotionFetcher
 from src.behavior.typo import TypoInjector
@@ -22,7 +27,9 @@ class BehaviorCoordinator:
     final playback timeline consumed by the frontend.
     """
 
-    def __init__(self, config: BehaviorConfig = None, timeline_config: TimelineConfig = None):
+    def __init__(
+        self, config: BehaviorConfig = None, timeline_config: TimelineConfig = None
+    ):
         self.config = config or BehaviorConfig()
 
         self.segmenter = SmartSegmenter(
@@ -123,7 +130,9 @@ class BehaviorCoordinator:
                 typo_variant,
                 _,
                 _,
-            ) = self.typo_injector.inject_typo(segment_text, typo_rate=typo_rate)
+            ) = self.typo_injector.inject_typo(
+                segment_text, typo_rate=typo_rate
+            )  # TODO: pass real configs
             if has_typo and typo_variant:
                 typo_text = typo_variant
 
