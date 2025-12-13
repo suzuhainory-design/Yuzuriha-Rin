@@ -5,7 +5,22 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, options);
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
+    let detail = "";
+    try {
+      const text = await res.text();
+      if (text) {
+        try {
+          const parsed = JSON.parse(text);
+          detail =
+            typeof parsed?.detail === "string" ? parsed.detail : JSON.stringify(parsed);
+        } catch {
+          detail = text;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error(`HTTP ${res.status}${detail ? `: ${detail}` : ""}`);
   }
   return res.json();
 }
@@ -59,6 +74,17 @@ export async function fetchUserAvatar() {
   }
 }
 
+/**
+ * @param {string|null} avatar
+ */
+export async function updateUserAvatar(avatar) {
+  await fetchJson("/api/avatar", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ avatar: avatar || "" }),
+  });
+}
+
 export async function createCharacter(payload) {
   const data = await fetchJson("/api/characters", {
     method: "POST",
@@ -79,4 +105,9 @@ export async function updateCharacter(id, payload) {
 
 export async function deleteCharacter(id) {
   await fetchJson(`/api/characters/${id}`, { method: "DELETE" });
+}
+
+export async function fetchCharacterBehaviorSchema() {
+  const data = await fetchJson("/api/characters/behavior-schema");
+  return data.fields || [];
 }

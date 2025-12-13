@@ -12,8 +12,44 @@ const typingStateBySession = new Map();
 const messageContainersBySession = new Map();
 let activeMessageContainer = /** @type {HTMLElement | null} */ (null);
 
+const DEFAULT_CHARACTER_AVATAR = "/static/images/avatar/default.webp";
+const DEFAULT_USER_AVATAR = "/static/images/avatar/user.webp";
+
+/**
+ * @param {HTMLImageElement} img
+ * @param {string} src
+ */
+function applyAvatar(img, src, fallback) {
+  const safe = src ? String(src) : "";
+  img.src = safe || fallback;
+  img.onerror = () => {
+    img.onerror = null;
+    img.src = fallback;
+  };
+}
+
 export function setWsClient(client) {
   wsClient = client;
+}
+
+export function refreshVisibleAvatars() {
+  if (!activeMessageContainer) return;
+  const sessionId = activeMessageContainer.dataset.sessionId || "";
+  if (!sessionId) return;
+
+  const nodes = activeMessageContainer.querySelectorAll(".message");
+  nodes.forEach((node) => {
+    const senderId = node.getAttribute("data-sender-id") || node.dataset.senderId || "";
+    const img = /** @type {HTMLImageElement | null} */ (
+      node.querySelector("img.message-avatar")
+    );
+    if (!img) return;
+    const src =
+      senderId === "user"
+        ? state.userAvatar || DEFAULT_USER_AVATAR
+        : getCharacterAvatar(sessionId);
+    applyAvatar(img, src, senderId === "user" ? DEFAULT_USER_AVATAR : DEFAULT_CHARACTER_AVATAR);
+  });
 }
 
 /**
@@ -262,10 +298,13 @@ function buildTextMessage(msg) {
 
   const avatar = document.createElement("img");
   avatar.className = "message-avatar";
-  avatar.src =
+  applyAvatar(
+    avatar,
     msg.sender_id === "user"
-      ? state.userAvatar || "/static/images/avatar/user.webp"
-      : getCharacterAvatar(msg.session_id);
+      ? state.userAvatar || DEFAULT_USER_AVATAR
+      : getCharacterAvatar(msg.session_id),
+    msg.sender_id === "user" ? DEFAULT_USER_AVATAR : DEFAULT_CHARACTER_AVATAR,
+  );
 
   const bubble = document.createElement("div");
   bubble.className = "message-bubble";
@@ -290,10 +329,13 @@ function buildImageMessage(msg) {
 
   const avatar = document.createElement("img");
   avatar.className = "message-avatar";
-  avatar.src =
+  applyAvatar(
+    avatar,
     msg.sender_id === "user"
-      ? state.userAvatar || "/static/images/avatar/user.webp"
-      : getCharacterAvatar(msg.session_id);
+      ? state.userAvatar || DEFAULT_USER_AVATAR
+      : getCharacterAvatar(msg.session_id),
+    msg.sender_id === "user" ? DEFAULT_USER_AVATAR : DEFAULT_CHARACTER_AVATAR,
+  );
 
   const bubble = document.createElement("div");
   bubble.className = "message-bubble message-image";
@@ -322,10 +364,13 @@ function buildUnsupportedMessage(msg) {
 
   const avatar = document.createElement("img");
   avatar.className = "message-avatar";
-  avatar.src =
+  applyAvatar(
+    avatar,
     msg.sender_id === "user"
-      ? state.userAvatar || "/static/images/avatar/user.webp"
-      : getCharacterAvatar(msg.session_id);
+      ? state.userAvatar || DEFAULT_USER_AVATAR
+      : getCharacterAvatar(msg.session_id),
+    msg.sender_id === "user" ? DEFAULT_USER_AVATAR : DEFAULT_CHARACTER_AVATAR,
+  );
 
   const bubble = document.createElement("div");
   bubble.className = "message-bubble";
@@ -346,7 +391,8 @@ function getCharacterAvatar(sessionId) {
   const character = session
     ? state.characters.find((c) => c.id === session.character_id)
     : null;
-  return character?.avatar || "/static/images/avatar/rin.webp";
+  const avatar = character?.avatar ? String(character.avatar) : "";
+  return avatar || DEFAULT_CHARACTER_AVATAR;
 }
 
 function setupInputHandlers() {

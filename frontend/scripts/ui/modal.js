@@ -3,6 +3,29 @@
 import { state, saveStateToStorage, setActiveSessionId } from "../core/state.js";
 import * as api from "../core/api.js";
 import { showToast } from "./toast.js";
+import { mountAvatarEditor, getAvatarEditorValue } from "./avatarEditor.js";
+
+/** @type {Array<{key:string,type:string,default:any,group:string}> | null} */
+let behaviorSchemaCache = null;
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+async function getBehaviorSchema() {
+  if (behaviorSchemaCache) return behaviorSchemaCache;
+  try {
+    behaviorSchemaCache = await api.fetchCharacterBehaviorSchema();
+    return behaviorSchemaCache;
+  } catch {
+    return null;
+  }
+}
 
 function createOverlay() {
   const overlay = document.createElement("div");
@@ -40,6 +63,17 @@ export function showSettingsModal(forceOpen) {
 
     body.innerHTML = getSettingsContent();
     overlay.appendChild(modal);
+
+    const avatarHost = /** @type {HTMLElement | null} */ (
+      modal.querySelector("#settingsAvatarEditor")
+    );
+    if (avatarHost) {
+      mountAvatarEditor(avatarHost, {
+        kind: "user",
+        initial: state.userAvatar,
+        readonly: false,
+      });
+    }
 
     const closeBtns = modal.querySelectorAll("[data-modal-close]");
     if (forceOpen) closeBtns.forEach((b) => b.classList.add("hidden"));
@@ -113,8 +147,12 @@ function getSettingsContent() {
         <input id="settingsBaseUrl" type="text" value="${baseUrl}" placeholder="https://..." />
       </div>
       <div class="form-group">
-        <label>昵称</label>
+        <label>用户昵称</label>
         <input id="settingsNickname" type="text" value="${nickname}" />
+      </div>
+      <div class="form-group">
+        <label>用户头像</label>
+        <div id="settingsAvatarEditor"></div>
       </div>
       <div class="form-group inline">
         <label>情绪主题</label>
@@ -149,6 +187,10 @@ async function saveSettings(modal) {
   const nickname = modal.querySelector("#settingsNickname")?.value?.trim();
   const emotionTheme = modal.querySelector("#settingsEmotionTheme")?.checked;
   const debugMode = modal.querySelector("#settingsDebugMode")?.checked;
+  const avatarEditor = /** @type {HTMLElement | null} */ (
+    modal.querySelector("#settingsAvatarEditor")
+  );
+  const newAvatar = avatarEditor ? getAvatarEditorValue(avatarEditor) : "";
 
   if (!provider || !apiKey || !model) {
     showToast("服务商、API Key 和模型为必填项。", "error");
@@ -168,6 +210,7 @@ async function saveSettings(modal) {
   state.debugEnabled = Boolean(debugMode);
 
   try {
+    await api.updateUserAvatar(newAvatar || "");
     await api.updateConfig({
       llm_provider: provider,
       llm_api_key: apiKey,
@@ -176,14 +219,19 @@ async function saveSettings(modal) {
       user_nickname: nickname || "",
       enable_emotion_theme: String(Boolean(emotionTheme)).toLowerCase(),
     });
+    state.userAvatar = newAvatar || null;
+    window.dispatchEvent(
+      new CustomEvent("user-avatar-changed", { detail: { avatar: newAvatar || null } }),
+    );
     saveStateToStorage();
     window.dispatchEvent(
       new CustomEvent("debug-mode-changed", { detail: { enabled: debugMode } }),
     );
     showToast("设置已保存。", "success");
     return true;
-  } catch {
-    showToast("保存设置失败。", "error");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "保存设置失败。";
+    showToast(msg || "保存设置失败。", "error");
     return false;
   }
 }
@@ -191,36 +239,49 @@ async function saveSettings(modal) {
 /**
  * @param {import("../core/types.js").Character} character
  */
-export function showCharacterSettingsModal(character) {
+export async function showCharacterSettingsModal(character) {
   const overlay = createOverlay();
-  const { modal, body } = createModalShell(`${character.name} 设置`);
-
   const readonly = character.is_builtin;
+  const { modal, body } = createModalShell(
+    `${character.name} 设置${readonly ? "（预览）" : ""}`,
+  );
+
+  const behaviorFields = await getBehaviorSchema();
   body.innerHTML = `
     <div class="modal-section">
       ${
         readonly
-          ? '<div class="modal-notice modal-notice-readonly">系统自带角色，仅可预览，不可编辑。</div>'
+          ? '<div class="modal-notice modal-notice-readonly modal-notice-strong">系统自带角色，仅可预览，不可编辑。</div>'
           : ""
       }
       <div class="form-group">
         <label>名称</label>
-        <input id="charName" type="text" value="${character.name}" ${
+        <input id="charName" type="text" value="${escapeHtml(character.name)}" ${
           readonly ? "readonly" : ""
         } />
       </div>
       <div class="form-group">
-        <label>头像 URL</label>
-        <input id="charAvatar" type="text" value="${character.avatar || ""}" ${
-          readonly ? "readonly" : ""
-        } />
+        <label>头像</label>
+        <div id="charAvatarEditor"></div>
       </div>
       <div class="form-group">
         <label>人设</label>
         <textarea id="charPersona" rows="6" ${
           readonly ? "readonly" : ""
-        }>${character.persona}</textarea>
+        }>${escapeHtml(character.persona)}</textarea>
       </div>
+      <div class="form-group">
+        <label>表情包</label>
+        <div class="tag-input" id="charEmoticonPacks" ${
+          readonly ? 'data-readonly="true"' : ""
+        }></div>
+        <div class="help-text">回车/逗号添加，点击标签删除</div>
+      </div>
+      ${
+        Array.isArray(behaviorFields) && behaviorFields.length
+          ? renderCharacterBehaviorFields(character, behaviorFields, readonly)
+          : '<div class="modal-notice modal-notice-readonly">行为系统配置加载失败（可尝试刷新页面）。</div>'
+      }
       <div class="modal-actions">
         ${
           readonly
@@ -244,19 +305,37 @@ export function showCharacterSettingsModal(character) {
   modal.querySelector("#charSaveBtn")?.addEventListener("click", async () => {
     if (readonly) return;
     const name = modal.querySelector("#charName")?.value?.trim();
-    const avatar = modal.querySelector("#charAvatar")?.value?.trim();
-    const persona = modal.querySelector("#charPersona")?.value?.trim();
-    if (!name || !persona || !avatar) {
-      showToast("所有字段均为必填项。", "error");
+    const avatarEditor = /** @type {HTMLElement | null} */ (
+      modal.querySelector("#charAvatarEditor")
+    );
+    const avatar = avatarEditor ? getAvatarEditorValue(avatarEditor) : "";
+    const persona = modal.querySelector("#charPersona")?.value?.trim() || "";
+    if (!name) {
+      showToast("名称为必填项。", "error");
       return;
     }
+
+    const emoticonPacks = readTagInputValue(
+      /** @type {HTMLElement | null} */ (modal.querySelector("#charEmoticonPacks")),
+    );
+
+    const behaviorParams = collectCharacterBehaviorParams(modal, behaviorFields);
+    if (behaviorParams === null) return;
+
     try {
       const updated = await api.updateCharacter(character.id, {
         name,
         avatar,
         persona,
+        emoticon_packs: emoticonPacks,
+        behavior_params: behaviorParams,
       });
       Object.assign(character, updated);
+      window.dispatchEvent(
+        new CustomEvent("character-avatar-changed", {
+          detail: { characterId: character.id, avatar: updated.avatar || "" },
+        }),
+      );
       saveStateToStorage();
       showToast("角色已更新。", "success");
       overlay.remove();
@@ -301,6 +380,318 @@ export function showCharacterSettingsModal(character) {
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
+
+  const emoticonContainer = /** @type {HTMLElement | null} */ (
+    modal.querySelector("#charEmoticonPacks")
+  );
+  if (emoticonContainer) {
+    const initial = Array.isArray(character?.emoticon_packs) ? character.emoticon_packs : [];
+    setupTagInput(emoticonContainer, initial, readonly);
+  }
+
+  const charAvatarEditor = /** @type {HTMLElement | null} */ (
+    modal.querySelector("#charAvatarEditor")
+  );
+  if (charAvatarEditor) {
+    mountAvatarEditor(charAvatarEditor, {
+      kind: "character",
+      initial: character.avatar || "",
+      readonly,
+    });
+  }
+
+  if (Array.isArray(behaviorFields) && behaviorFields.length) {
+    initTagInputs(modal, character, behaviorFields, readonly);
+  }
+}
+
+/**
+ * @param {import("../core/types.js").Character} character
+ * @param {Array<{key:string,type:string,default:any,group:string}>} fields
+ * @param {boolean} readonly
+ */
+function renderCharacterBehaviorFields(character, fields, readonly) {
+  /** @type {Record<string, Array<{key:string,type:string,default:any,group:string}>>} */
+  const grouped = {};
+  fields.forEach((f) => {
+    (grouped[f.group] ||= []).push(f);
+  });
+
+  const order = ["behavior", "timeline"];
+  const sections = order
+    .filter((g) => (grouped[g] || []).length)
+    .map((group) => {
+      const title =
+        group === "timeline"
+          ? "时间轴 / 打字状态"
+          : "行为参数";
+      const inner = grouped[group]
+        .map((f) => renderBehaviorField(character, f, readonly))
+        .join("");
+      return `
+        <details class="modal-details">
+          <summary>${title}</summary>
+          <div class="modal-details-body">${inner}</div>
+        </details>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="modal-divider"></div>
+    ${sections}
+  `;
+}
+
+/**
+ * @param {import("../core/types.js").Character} character
+ * @param {{key:string,type:string,default:any,group:string}} field
+ * @param {boolean} readonly
+ */
+function renderBehaviorField(character, field, readonly) {
+  const key = field.key;
+  const type = String(field.type || "str");
+  const currentValue = character?.[key];
+  const value = currentValue ?? field.default ?? "";
+  const label = escapeHtml(key);
+  const help =
+    field.default !== undefined && field.default !== null
+      ? `<div class="help-text">default: ${escapeHtml(field.default)}</div>`
+      : "";
+
+  if (type === "bool") {
+    return `
+      <div class="form-group inline">
+        <label>${label}</label>
+        <label class="switch">
+          <input type="checkbox" data-bfield="${escapeHtml(key)}" ${
+            value ? "checked" : ""
+          } ${readonly ? "disabled" : ""} />
+          <span class="slider"></span>
+        </label>
+      </div>
+    `;
+  }
+
+  if (type === "int" || type === "float") {
+    const step = type === "int" ? "1" : "0.01";
+    return `
+      <div class="form-group">
+        <label>${label}</label>
+        <input type="number" step="${step}" data-bfield="${escapeHtml(key)}" value="${escapeHtml(
+          value,
+        )}" ${readonly ? "disabled" : ""} />
+        ${help}
+      </div>
+    `;
+  }
+
+  if (type.startsWith("list[")) {
+    return "";
+  }
+
+  return `
+    <div class="form-group">
+      <label>${label}</label>
+      <input type="text" data-bfield="${escapeHtml(key)}" value="${escapeHtml(
+        value,
+      )}" ${readonly ? "disabled" : ""} />
+      ${help}
+    </div>
+  `;
+}
+
+/**
+ * @param {HTMLElement} modal
+ * @param {import("../core/types.js").Character} character
+ * @param {Array<{key:string,type:string,default:any,group:string}>} fields
+ * @param {boolean} readonly
+ */
+function initTagInputs(modal, character, fields, readonly) {
+  fields
+    .filter((f) => String(f.type || "").startsWith("list["))
+    .forEach((f) => {
+      const container = /** @type {HTMLElement | null} */ (
+        modal.querySelector(`[data-bfield="${f.key}"].tag-input`)
+      );
+      if (!container) return;
+      const initial = Array.isArray(character?.[f.key]) ? character[f.key] : [];
+      setupTagInput(container, initial, readonly);
+    });
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {string[]} initialTags
+ * @param {boolean} readonly
+ */
+function setupTagInput(container, initialTags, readonly) {
+  /** @type {string[]} */
+  let tags = Array.isArray(initialTags) ? initialTags.slice() : [];
+  tags = normalizeTags(tags);
+
+  container.innerHTML = "";
+  container.classList.add("tag-input");
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "tag-input-field";
+  input.placeholder = readonly ? "" : "输入后回车…";
+  input.disabled = Boolean(readonly);
+
+  function sync() {
+    container.dataset.value = JSON.stringify(tags);
+    container.querySelectorAll(".tag-chip").forEach((n) => n.remove());
+    tags.forEach((t) => {
+      const chip = document.createElement("span");
+      chip.className = "tag-chip";
+      const text = document.createElement("span");
+      text.className = "tag-chip-text";
+      text.textContent = t;
+      chip.appendChild(text);
+
+      if (!readonly) {
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "tag-chip-remove";
+        rm.textContent = "×";
+        rm.addEventListener("click", () => {
+          tags = tags.filter((x) => x !== t);
+          sync();
+        });
+        chip.appendChild(rm);
+      }
+
+      container.insertBefore(chip, input);
+    });
+  }
+
+  /**
+   * @param {string} raw
+   */
+  function addFromRaw(raw) {
+    if (readonly) return;
+    const parts = raw.split(/[,\n]+/g);
+    let changed = false;
+    for (const part of parts) {
+      const next = normalizeTags([part])[0];
+      if (!next) continue;
+      if (tags.includes(next)) continue;
+      tags.push(next);
+      changed = true;
+    }
+    if (changed) {
+      tags = normalizeTags(tags);
+      input.value = "";
+      sync();
+    }
+  }
+
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === "," || ev.key === "Tab") {
+      ev.preventDefault();
+      addFromRaw(input.value);
+      return;
+    }
+
+    if (ev.key === "Backspace" && !input.value) {
+      if (readonly) return;
+      if (!tags.length) return;
+      tags.pop();
+      sync();
+    }
+  });
+  input.addEventListener("blur", () => addFromRaw(input.value));
+  input.addEventListener("paste", (ev) => {
+    if (readonly) return;
+    const text = ev.clipboardData?.getData("text/plain");
+    if (!text) return;
+    if (!/[,\n]/.test(text)) return;
+    ev.preventDefault();
+    addFromRaw(text);
+  });
+
+  container.addEventListener("click", () => {
+    if (!readonly) input.focus();
+  });
+
+  container.appendChild(input);
+  sync();
+}
+
+/**
+ * @param {string[]} raw
+ * @returns {string[]}
+ */
+function normalizeTags(raw) {
+  const out = [];
+  for (const item of raw || []) {
+    const s = String(item ?? "").trim();
+    if (!s) continue;
+    if (!out.includes(s)) out.push(s);
+  }
+  return out;
+}
+
+/**
+ * @param {HTMLElement} modal
+ * @param {Array<{key:string,type:string,default:any,group:string}> | null} fields
+ * @returns {Record<string, any> | null}
+ */
+function collectCharacterBehaviorParams(modal, fields) {
+  if (!Array.isArray(fields) || !fields.length) return {};
+
+  /** @type {Record<string, any>} */
+  const out = {};
+
+  for (const f of fields) {
+    const key = f.key;
+    const type = String(f.type || "str");
+    const el = modal.querySelector(`[data-bfield="${key}"]`);
+    if (!el) continue;
+
+    if (type === "bool") {
+      out[key] = Boolean(/** @type {HTMLInputElement} */ (el).checked);
+      continue;
+    }
+
+    if (type === "int" || type === "float") {
+      const raw = /** @type {HTMLInputElement} */ (el).value;
+      if (raw === "" || raw == null) {
+        showToast(`${key} 不能为空`, "error");
+        return null;
+      }
+      const num = type === "int" ? Number.parseInt(raw, 10) : Number.parseFloat(raw);
+      if (Number.isNaN(num)) {
+        showToast(`${key} 不是有效数字`, "error");
+        return null;
+      }
+      out[key] = num;
+      continue;
+    }
+
+    if (type.startsWith("list[")) {
+      continue;
+    }
+
+    out[key] = String(/** @type {HTMLInputElement} */ (el).value ?? "");
+  }
+
+  return out;
+}
+
+/**
+ * @param {HTMLElement | null} container
+ * @returns {string[]}
+ */
+function readTagInputValue(container) {
+  if (!container) return [];
+  try {
+    const tags = JSON.parse(container.dataset.value || "[]");
+    return Array.isArray(tags) ? tags : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -316,14 +707,6 @@ export function showCreateCharacterModal() {
         <div class="form-group">
           <label>名称</label>
           <input id="newCharName" type="text" placeholder="必填" />
-        </div>
-        <div class="form-group">
-          <label>头像 URL</label>
-          <input id="newCharAvatar" type="text" placeholder="https://..." />
-        </div>
-        <div class="form-group">
-          <label>人设</label>
-          <textarea id="newCharPersona" rows="6" placeholder="必填"></textarea>
         </div>
         <div class="modal-actions">
           <button class="modal-btn modal-btn-secondary" data-modal-close>取消</button>
@@ -347,14 +730,12 @@ export function showCreateCharacterModal() {
 
     modal.querySelector("#newCharCreateBtn")?.addEventListener("click", async () => {
       const name = modal.querySelector("#newCharName")?.value?.trim();
-      const avatar = modal.querySelector("#newCharAvatar")?.value?.trim();
-      const persona = modal.querySelector("#newCharPersona")?.value?.trim();
-      if (!name || !persona || !avatar) {
-        showToast("所有字段均为必填项。", "error");
+      if (!name) {
+        showToast("名称为必填项。", "error");
         return;
       }
       try {
-        const created = await api.createCharacter({ name, avatar, persona });
+        const created = await api.createCharacter({ name });
         state.characters.push(created);
         state.sessions = await api.fetchSessions();
         saveStateToStorage();

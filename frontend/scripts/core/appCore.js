@@ -12,7 +12,7 @@ import * as api from "./api.js";
 import { WsClient } from "./ws.js";
 import { GlobalWsClient } from "./globalWs.js";
 import { renderSessionListView, showSessionListView } from "../views/sessionList.js";
-import { renderChatSession, showChatSession, showChatView, ensureChatSessionContainer, setWsClient, dropChatSessionContainer } from "../views/chatView.js";
+import { renderChatSession, showChatSession, showChatView, ensureChatSessionContainer, setWsClient, dropChatSessionContainer, refreshVisibleAvatars } from "../views/chatView.js";
 import { showSettingsModal, showErrorModal, showConfirmModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
 import { appendDebugLog, setDebugPanelVisible } from "../ui/debugPanel.js";
@@ -411,6 +411,18 @@ export function createApp() {
     window.addEventListener("active-session-changed", () => {
       updateActiveClient();
       updateDebugModeUI();
+    });
+
+    window.addEventListener("user-avatar-changed", () => {
+      refreshVisibleAvatars();
+    });
+
+    window.addEventListener("character-avatar-changed", (ev) => {
+      const characterId = ev.detail?.characterId;
+      if (characterId) {
+        renderSessionListView();
+        refreshVisibleAvatars();
+      }
     });
   }
 

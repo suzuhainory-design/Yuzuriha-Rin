@@ -1,7 +1,8 @@
 import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, get_args, get_origin
+from pydantic_core import PydanticUndefined
 from src.infrastructure.database.connection import DatabaseConnection
 from src.services.character.character_service import CharacterService
 from src.services.config.config_service import ConfigService
@@ -14,6 +15,7 @@ from src.infrastructure.database.repositories import (
 )
 from src.core.config import database_config
 from src.core.models.constants import DEFAULT_USER_ID
+from src.core.models.character import Character
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +54,9 @@ async def initialize_services():
 
 class CharacterCreate(BaseModel):
     name: str
-    avatar: str
-    persona: str
+    avatar: Optional[str] = None
+    persona: Optional[str] = None
+    emoticon_packs: Optional[List[str]] = None
     behavior_params: Optional[Dict[str, Any]] = None
 
 
@@ -61,11 +64,144 @@ class CharacterUpdate(BaseModel):
     name: Optional[str] = None
     avatar: Optional[str] = None
     persona: Optional[str] = None
+    emoticon_packs: Optional[List[str]] = None
     behavior_params: Optional[Dict[str, Any]] = None
 
 
 class ConfigUpdate(BaseModel):
     config: Dict[str, str]
+
+
+class AvatarUpdate(BaseModel):
+    avatar: Optional[str] = None
+
+
+def _pydantic_field_default(field) -> Any:
+    if field.default is not PydanticUndefined:
+        return field.default
+    if getattr(field, "default_factory", None):
+        try:
+            return field.default_factory()
+        except Exception:
+            return None
+    return None
+
+
+def _annotation_to_type_name(annotation: Any) -> str:
+    origin = get_origin(annotation)
+    if origin is None:
+        try:
+            return annotation.__name__
+        except Exception:
+            return str(annotation)
+
+    if origin in (list, List):
+        args = get_args(annotation)
+        if args:
+            return f"list[{_annotation_to_type_name(args[0])}]"
+        return "list"
+
+    if str(origin) == "typing.Union":
+        args = [a for a in get_args(annotation) if a is not type(None)]  # noqa: E721
+        if len(args) == 1:
+            return _annotation_to_type_name(args[0])
+        return "union"
+
+    return str(origin)
+
+
+def _normalize_string_list(values: Optional[List[str]]) -> List[str]:
+    out: List[str] = []
+    for item in list(values or []):
+        s = str(item).strip()
+        if not s:
+            continue
+        if s not in out:
+            out.append(s)
+    return out
+
+
+_ALLOWED_LOCAL_AVATARS = {
+    "/static/images/avatar/rin.webp",
+    "/static/images/avatar/abai.webp",
+    "/static/images/avatar/user.webp",
+    "/static/images/avatar/default.webp",
+}
+
+
+def _validate_avatar_value(value: Optional[str], *, allow_local: bool) -> str:
+    """
+    Allowed avatar values (stored in DB):
+    - "" (empty) -> use frontend fallback default
+    - whitelisted local static path (allow_local=True only)
+    - http(s) URL
+    - data:image/* data URL
+    """
+    s = (value or "").strip()
+    if not s:
+        return ""
+
+    lower = s.lower()
+    if lower.startswith("data:image/"):
+        return s
+
+    if lower.startswith("http://") or lower.startswith("https://"):
+        return s
+
+    if allow_local and s in _ALLOWED_LOCAL_AVATARS:
+        return s
+
+    raise HTTPException(status_code=400, detail="Invalid avatar value")
+
+
+@router.get("/characters/behavior-schema")
+async def get_character_behavior_schema():
+    """
+    Return a machine-readable schema for all character behavior-system fields.
+    Frontend uses this to render editable controls without duplicating field lists.
+    """
+    exclude = {
+        "id",
+        "name",
+        "avatar",
+        "persona",
+        "emoticon_packs",
+        "is_builtin",
+        "created_at",
+        "updated_at",
+    }
+
+    fields: List[Dict[str, Any]] = []
+    for key, field in Character.model_fields.items():
+        if key in exclude:
+            continue
+
+        type_name = _annotation_to_type_name(field.annotation)
+        default_value = _pydantic_field_default(field)
+
+        if key.startswith("enable_") or key in {
+            "max_segment_length",
+            "min_pause_duration",
+            "max_pause_duration",
+            "base_typo_rate",
+            "typo_recall_rate",
+            "recall_delay",
+            "retype_delay",
+        }:
+            group = "behavior"
+        else:
+            group = "timeline"
+
+        fields.append(
+            {
+                "key": key,
+                "type": type_name,
+                "default": default_value,
+                "group": group,
+            }
+        )
+
+    return {"fields": fields}
 
 
 @router.get("/characters")
@@ -90,8 +226,9 @@ async def create_character(data: CharacterCreate):
 
     character = await character_service.create_character(
         name=data.name,
-        avatar=data.avatar,
-        persona=data.persona,
+        avatar=_validate_avatar_value(data.avatar, allow_local=True) if data.avatar is not None else None,
+        persona=(data.persona or ""),
+        emoticon_packs=data.emoticon_packs,
         behavior_params=data.behavior_params,
     )
 
@@ -115,9 +252,11 @@ async def update_character(character_id: str, data: CharacterUpdate):
     if data.name is not None:
         character.name = data.name
     if data.avatar is not None:
-        character.avatar = data.avatar
+        character.avatar = _validate_avatar_value(data.avatar, allow_local=True)
     if data.persona is not None:
-        character.persona = data.persona
+        character.persona = data.persona or ""
+    if data.emoticon_packs is not None:
+        character.emoticon_packs = _normalize_string_list(data.emoticon_packs)
     if data.behavior_params:
         for key, value in data.behavior_params.items():
             if hasattr(character, key):
@@ -227,10 +366,18 @@ async def get_user_avatar(user_id: str = DEFAULT_USER_ID):
 
 
 @router.post("/avatar")
-async def upload_user_avatar(avatar_data: str, user_id: str = DEFAULT_USER_ID):
+async def upload_user_avatar(data: AvatarUpdate, user_id: str = DEFAULT_USER_ID):
     await initialize_services()
 
-    success = await config_service.set_user_avatar(avatar_data, user_id)
+    avatar = _validate_avatar_value(data.avatar, allow_local=False)
+
+    if not avatar:
+        success = await config_service.delete_user_avatar(user_id)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete avatar")
+        return {"success": True}
+
+    success = await config_service.set_user_avatar(avatar, user_id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to upload avatar")
 

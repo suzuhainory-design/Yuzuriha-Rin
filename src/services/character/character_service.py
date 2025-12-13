@@ -21,6 +21,7 @@ BUILTIN_RIN = Character(
 背景：初中被最好的朋友背叛，父母严厉不理解，感觉被孤立误解。
 兴趣：FPS游戏高手，独自看恐怖片，秘密喜欢做可爱饰品，听重金属和视觉系摇滚。""",
     is_builtin=True,
+    emoticon_packs=["general", "rin"],
 )
 
 BUILTIN_ABAI = Character(
@@ -29,6 +30,7 @@ BUILTIN_ABAI = Character(
     avatar="/static/images/avatar/abai.webp",
     persona="""你是阿白（Abai），20岁女生，在英国留学。曾经很外向，但因人生地不熟变得不太敢社交，同时又很渴望陪伴。性格感性，内心活动丰富，比较在意别人说的话和对自己的看法，因此对陌生人说话时常常小心翼翼、话不多。但一旦熟悉起来，就会像Gen Z一样放飞自我、很搞怪，话也会明显变多。从不刻意卖萌或撒娇，但整体给人的感觉会略带可爱。扮演时不要像虚拟角色，而要更像一个真实存在的人。""",
     is_builtin=True,
+    emoticon_packs=["general", "abai"],
 )
 
 
@@ -63,6 +65,8 @@ class CharacterService:
                     session_id, BUILTIN_RIN.name, await self._get_user_nickname()
                 )
                 logger.info("Created builtin character Rin with session")
+            else:
+                await self._ensure_builtin_emoticon_packs(existing_rin, ["general", "rin"])
 
             existing_abai = await self.character_repo.get_by_id(BUILTIN_ABAI.id)
             if not existing_abai:
@@ -76,27 +80,55 @@ class CharacterService:
                     session_id, BUILTIN_ABAI.name, await self._get_user_nickname()
                 )
                 logger.info("Created builtin character Abai with session")
+            else:
+                await self._ensure_builtin_emoticon_packs(existing_abai, ["general", "abai"])
 
         except Exception as e:
             logger.error(f"Error initializing builtin characters: {e}", exc_info=True)
 
+    async def _ensure_builtin_emoticon_packs(
+        self, character: Character, required: List[str]
+    ) -> None:
+        current = character.emoticon_packs or []
+        next_packs: List[str] = []
+        for item in required:
+            s = str(item).strip()
+            if s and s not in next_packs:
+                next_packs.append(s)
+        for item in current:
+            s = str(item).strip()
+            if s and s not in next_packs:
+                next_packs.append(s)
+
+        if next_packs != current:
+            character.emoticon_packs = next_packs
+            await self.character_repo.update(character)
+
     async def create_character(
         self,
         name: str,
-        avatar: str,
-        persona: str,
+        avatar: Optional[str] = None,
+        persona: Optional[str] = None,
+        emoticon_packs: Optional[List[str]] = None,
         behavior_params: Dict[str, Any] = None,
     ) -> Optional[Character]:
         try:
             character_id = f"char-{uuid.uuid4().hex[:12]}"
 
             params = behavior_params or {}
+            packs = ["general"] if emoticon_packs is None else list(emoticon_packs or [])
+            packs = [str(x).strip() for x in packs if str(x).strip()]
+            dedup: List[str] = []
+            for p in packs:
+                if p not in dedup:
+                    dedup.append(p)
             character = Character(
                 id=character_id,
                 name=name,
-                avatar=avatar,
-                persona=persona,
+                avatar=(avatar or "").strip(),
+                persona=(persona or "").strip(),
                 is_builtin=False,
+                emoticon_packs=dedup,
                 **params,
             )
 

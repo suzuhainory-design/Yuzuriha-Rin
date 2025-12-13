@@ -5,6 +5,8 @@ import { renderChatSession, showChatSession, showChatView, ensureChatSessionCont
 import { formatSessionTimestamp } from "../utils/time.js";
 import { clearEmotionTheme } from "../ui/emotionTheme.js";
 
+const DEFAULT_AVATAR = "/static/images/avatar/default.webp";
+
 export function showSessionListView() {
   clearEmotionTheme();
   // No active session when in session list view.
@@ -73,7 +75,11 @@ function buildSessionItem(session, character) {
 
   const avatar = document.createElement("img");
   avatar.className = "avatar";
-  avatar.src = character.avatar || "/static/images/avatar/rin.webp";
+  avatar.src = character.avatar ? String(character.avatar) : DEFAULT_AVATAR;
+  avatar.onerror = () => {
+    avatar.onerror = null;
+    avatar.src = DEFAULT_AVATAR;
+  };
   avatarWrap.appendChild(avatar);
 
   div.appendChild(avatarWrap);
