@@ -241,11 +241,11 @@ textarea {
 .wechat-shell::after {
     content: "";
     position: absolute;
-    inset: -40px;
-    border-radius: calc(var(--shell-radius) + 20px);
+    inset: -70px;
+    border-radius: calc(var(--shell-radius) + 45px);
     z-index: -1;
     pointer-events: none;
-    filter: blur(18px);
+    filter: blur(35px);
     opacity: 0;
     transition: opacity 0.45s ease, filter 0.45s ease;
 }

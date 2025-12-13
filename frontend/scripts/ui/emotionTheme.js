@@ -1,13 +1,6 @@
 // @ts-check
 
-/**
- * Multi-emotion glow renderer:
- * - ignores neutral
- * - intensity controls saturation/lightness/alpha
- * - multiple emotions form a smooth conic gradient (ordered gently)
- * - transitions via cross-fade between 2 layers
- * @param {Record<string, string>} emotionMap
- */
+/** Multi-emotion glow renderer */
 export function applyEmotionTheme(emotionMap) {
   const shell = document.getElementById("wechatShell");
   if (!shell) return;
@@ -16,41 +9,39 @@ export function applyEmotionTheme(emotionMap) {
     return;
   }
 
-  /** @type {Record<string, {h:number,s:number,l:number}>} */
+  /** Base HSL palette */
   const palette = {
-    neutral: { h: 0, s: 0, l: 70 }, // ignored
-    // High-contrast, easy-to-recognize hues (avoid adjacent hues where possible).
-    // Warm
-    angry: { h: 4, s: 90, l: 50 }, // deep red
-    excited: { h: 22, s: 95, l: 54 }, // vivid orange
-    happy: { h: 52, s: 95, l: 58 }, // bright yellow
-    // Green / teal
-    caring: { h: 145, s: 70, l: 48 }, // green
-    playful: { h: 95, s: 85, l: 52 }, // lime-green
-    confused: { h: 182, s: 72, l: 46 }, // teal
-    surprised: { h: 198, s: 88, l: 56 }, // cyan
-    // Blue
-    sad: { h: 220, s: 78, l: 54 }, // blue
-    serious: { h: 235, s: 58, l: 44 }, // deep navy-blue
-    // Purple / pink
-    anxious: { h: 275, s: 70, l: 52 }, // purple
-    shy: { h: 305, s: 62, l: 60 }, // violet-pink
-    embarrassed: { h: 332, s: 86, l: 58 }, // magenta
-    affectionate: { h: 350, s: 90, l: 58 }, // rose
-    // Low-saturation states
-    tired: { h: 210, s: 22, l: 60 }, // desaturated blue-gray
-    bored: { h: 40, s: 18, l: 62 }, // warm gray
+    neutral: { h: 0, s: 0, l: 70 },
+
+    angry: { h: 4, s: 90, l: 50 },
+    excited: { h: 22, s: 95, l: 54 },
+    happy: { h: 52, s: 95, l: 58 },
+
+    caring: { h: 145, s: 70, l: 48 },
+    playful: { h: 95, s: 85, l: 52 },
+    confused: { h: 182, s: 72, l: 46 },
+    surprised: { h: 198, s: 88, l: 56 },
+
+    sad: { h: 220, s: 78, l: 54 },
+    serious: { h: 235, s: 58, l: 44 },
+
+    anxious: { h: 275, s: 70, l: 52 },
+    shy: { h: 305, s: 62, l: 60 },
+    embarrassed: { h: 332, s: 86, l: 58 },
+    affectionate: { h: 350, s: 90, l: 58 },
+
+    tired: { h: 210, s: 22, l: 60 },
+    bored: { h: 40, s: 18, l: 62 },
   };
 
-  /** @type {Record<string, {alpha:number, dl:number, ds:number}>} */
+  /** Intensity tuning */
   const intensity = {
-    low: { alpha: 0.28, dl: 14, ds: -14 },
-    medium: { alpha: 0.5, dl: 7, ds: -6 },
-    high: { alpha: 0.74, dl: 0, ds: 0 },
-    extreme: { alpha: 0.92, dl: -8, ds: 6 },
+    low:     { alpha: 0.10, dl: 20, ds: -46 },
+    medium:  { alpha: 0.20, dl: 14, ds: -32 },
+    high:    { alpha: 0.35, dl: 8,  ds: -16 },
+    extreme: { alpha: 0.78, dl: -6, ds: 8 },
   };
 
-  /** @type {{h:number,s:number,l:number,a:number,key:string}[]} */
   const colors = [];
   for (const [rawKey, rawVal] of Object.entries(emotionMap)) {
     const key = String(rawKey || "").toLowerCase();
@@ -58,12 +49,13 @@ export function applyEmotionTheme(emotionMap) {
     const base = palette[key];
     if (!base) continue;
     const iv = intensity[String(rawVal || "").toLowerCase()] || intensity.medium;
+
     colors.push({
       key,
       h: base.h,
-      s: clamp(base.s + iv.ds, 8, 96),
-      l: clamp(base.l + iv.dl, 28, 78),
-      a: clamp(iv.alpha, 0.25, 1),
+      s: clamp(base.s + iv.ds, 4, 92),
+      l: clamp(base.l + iv.dl, 30, 84),
+      a: clamp(iv.alpha, 0.06, 1),
     });
   }
 
@@ -87,10 +79,7 @@ export function clearEmotionTheme() {
 
 let activeLayer = 1;
 
-/**
- * @param {HTMLElement} shell
- * @param {string} gradient
- */
+/** Cross-fade layers */
 function applyGradientWithTransition(shell, gradient) {
   const nextLayer = activeLayer === 1 ? 2 : 1;
   shell.style.setProperty(`--glow-gradient-${nextLayer}`, gradient);
@@ -100,35 +89,35 @@ function applyGradientWithTransition(shell, gradient) {
   activeLayer = nextLayer;
 }
 
-/**
- * @param {{h:number,s:number,l:number,a:number}[]} colors
- */
+/** Build radial / conic gradient */
 function buildGlowGradient(colors) {
-  const stops = colors.map((c) => `hsla(${c.h} ${c.s}% ${c.l}% / ${c.a})`);
+  const stops = colors.map(
+    (c) => `hsla(${c.h} ${c.s}% ${c.l}% / ${c.a})`
+  );
+
   if (stops.length === 1) {
     const c = stops[0];
-    return `radial-gradient(circle at 50% 50%, ${c} 0%, rgba(0,0,0,0) 70%)`;
+    return `radial-gradient(circle at 50% 50%, ${c} 0%, ${c} 30%, rgba(0,0,0,0) 85%)`;
   }
-  // Conic gradients blend smoothly between consecutive colors.
+
   return `conic-gradient(from 180deg, ${stops.join(", ")}, ${stops[0]})`;
 }
 
-/**
- * Greedy nearest-neighbor ordering by HSL distance.
- * @param {{h:number,s:number,l:number,a:number,key:string}[]} input
- */
+/** Gentle hue ordering */
 function orderColorsGently(input) {
   const remaining = input.slice();
   remaining.sort((a, b) => a.a - b.a);
+
   const start = remaining.shift();
   if (!start) return [];
   const ordered = [start];
 
-  while (remaining.length > 0) {
+  while (remaining.length) {
     const last = ordered[ordered.length - 1];
     let bestIdx = 0;
-    let bestD = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < remaining.length; i += 1) {
+    let bestD = Infinity;
+
+    for (let i = 0; i < remaining.length; i++) {
       const d = colorDistance(last, remaining[i]);
       if (d < bestD) {
         bestD = d;
@@ -137,13 +126,11 @@ function orderColorsGently(input) {
     }
     ordered.push(remaining.splice(bestIdx, 1)[0]);
   }
+
   return ordered;
 }
 
-/**
- * @param {{h:number,s:number,l:number}} a
- * @param {{h:number,s:number,l:number}} b
- */
+/** HSL distance */
 function colorDistance(a, b) {
   const dhRaw = Math.abs(a.h - b.h);
   const dh = Math.min(dhRaw, 360 - dhRaw) / 180;
