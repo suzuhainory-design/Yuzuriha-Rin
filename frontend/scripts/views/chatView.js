@@ -4,6 +4,7 @@ import { state, setReadTimestamp, saveStateToStorage } from "../core/state.js";
 import { applyEmotionTheme, clearEmotionTheme } from "../ui/emotionTheme.js";
 import { formatChatTimestamp } from "../utils/time.js";
 import { attachZoomToContainer } from "../ui/imageZoom.js";
+import { showToast } from "../ui/toast.js";
 
 /** @type {import("../core/ws.js").WsClient | null} */
 let wsClient = null;
@@ -475,9 +476,12 @@ function setupInputHandlers() {
     document.getElementById("userInput")
   );
   const sendBtn = document.getElementById("toggleBtn");
-  if (!input || !sendBtn || !wsClient) return;
+  if (!input || !sendBtn) return;
 
   input.disabled = false;
+
+  // Check if handlers are already attached by checking for our custom property
+  if (input.dataset.handlersAttached === "true") return;
 
   input.oninput = () => {
     adjustTextareaHeight(input);
@@ -498,15 +502,32 @@ function setupInputHandlers() {
   };
 
   sendBtn.onclick = () => sendCurrentText();
+  
+  // Mark that handlers have been attached
+  input.dataset.handlersAttached = "true";
 }
 
 function sendCurrentText() {
   const input = /** @type {HTMLTextAreaElement | null} */ (
     document.getElementById("userInput")
   );
-  if (!input || !wsClient) return;
+  if (!input) return;
+  
   const content = input.value.trim();
   if (!content) return;
+  
+  // Check if wsClient exists and is ready
+  if (!wsClient) {
+    showToast("连接未建立，请稍后重试", "error"); // "Connection not established, please try again later"
+    return;
+  }
+  
+  // Check if WebSocket is open
+  if (!wsClient.ws || wsClient.ws.readyState !== WebSocket.OPEN) {
+    showToast("正在连接，请稍后重试", "info"); // "Connecting, please try again later"
+    return;
+  }
+  
   wsClient.sendText(content);
   input.value = "";
   adjustTextareaHeight(input);
