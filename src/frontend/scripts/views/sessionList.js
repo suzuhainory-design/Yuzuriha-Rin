@@ -162,7 +162,7 @@ function getLastPreviewText(sessionId) {
     if (msg.type === "image") return "[Image]";
     if (msg.type === "system-recall") return "Message recalled";
   }
-  return "No messages yet";
+  return "";
 }
 
 function getLastPreviewTime(sessionId) {
