@@ -1,6 +1,6 @@
 """
 表情包管理工具
-独立的桌面应用程序，用于管理 data/stickers 目录的表情包
+独立的桌面应用程序，用于管理 assets/stickers 目录的表情包
 """
 
 import sys
@@ -312,14 +312,19 @@ class StickerWidget(QFrame):
         self.update_border_color()
 
     def get_relative_path(self) -> str:
-        """获取相对于项目根目录的路径"""
+        """获取相对于项目根目录并带 ./ 前缀的路径"""
+        project_root = self.sticker_base.parent.parent
         try:
-            # 从 sticker_base 向上到项目根目录
-            project_root = self.sticker_base.parent
             relative = self.image_path.relative_to(project_root)
-            return str(relative).replace("\\", "/")
+            normalized = str(relative).replace("\\", "/")
         except ValueError:
-            return str(self.image_path).replace("\\", "/")
+            normalized = str(self.image_path).replace("\\", "/")
+
+        normalized = normalized.lstrip("/")
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
+
+        return f"./{normalized}" if normalized else "./"
 
     def load_image_descriptions_data(self) -> dict:
         """加载 image_descriptions.json"""

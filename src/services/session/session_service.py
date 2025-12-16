@@ -15,7 +15,7 @@ from src.core.utils.logger import (
     broadcast_log_if_needed,
     LogCategory,
 )
-from src.utils.image_alter import image_alter
+from src.utils.image_descriptions import image_descriptions
 from src.services.tools.tool_service import ToolService
 
 logger = logging.getLogger(__name__)
@@ -653,7 +653,7 @@ class SessionService:
         if msg.type == MessageType.IMAGE:
             # Try to get image description
             image_path = msg.content or ""
-            description = image_alter.get_description(image_path)
+            description = image_descriptions.get_description(image_path)
             if description:
                 return f"[image]({description})"
             else:

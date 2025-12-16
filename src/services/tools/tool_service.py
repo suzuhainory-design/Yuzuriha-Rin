@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any
 from src.core.models.message import Message, MessageType
 from src.services.messaging.message_service import MessageService
-from src.utils.image_alter import image_alter
+from src.utils.image_descriptions import image_descriptions
 
 
 # Tool definitions for LLM (can be customized in future)
@@ -119,14 +119,14 @@ class ToolService:
         Returns:
             Dictionary with character and user avatar descriptions
         """
-        character_desc = image_alter.get_description(character_avatar)
+        character_desc = image_descriptions.get_description(character_avatar)
         
         # Only return user avatar description if it's the default avatar
         # Don't return description for custom user avatars
         from src.core.models.constants import DEFAULT_USER_AVATAR
         user_desc = None
         if user_avatar == DEFAULT_USER_AVATAR:
-            user_desc = image_alter.get_description(user_avatar)
+            user_desc = image_descriptions.get_description(user_avatar)
 
         return {
             "character_avatar_description": character_desc or "图片加载失败",
