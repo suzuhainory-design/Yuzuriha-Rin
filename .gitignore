@@ -1,14 +1,13 @@
+.claude/
+.venv/
 __pycache__/
 pytest_cache/
 *.egg-info/
-.venv/
-dist/
-build/
-.claude/
 
-models/few_shot_intent_sft/
-models/wechat_intent_model/
+assets/models/few_shot_intent_sft/
+assets/models/intent_predictor/
 
 *.pyc
-uv.lock
 *.db
+
+uv.lock

@@ -20,8 +20,9 @@ class IntentPredictor:
     def __init__(self):
         self.model_path = (
             Path(__file__).parent.parent.parent.parent
+            / "assets"
             / "models"
-            / "wechat_intent_model"
+            / "intent_predictor"
         )
         self._load_model()
 
@@ -139,11 +140,12 @@ class StickerSelector:
     Sticker selection service - SINGLE SOURCE OF TRUTH for sticker confidence thresholds
     These thresholds determine when to send stickers based on emotion detection confidence
     """
+
     CONFIDENCE_THRESHOLDS = {
         "positive": 0.7,  # Threshold for positive emotions
-        "neutral": 0.8,   # Threshold for neutral emotions  
+        "neutral": 0.8,  # Threshold for neutral emotions
         "negative": 0.9,  # Threshold for negative emotions
-        "default": 0.8,   # Default threshold
+        "default": 0.8,  # Default threshold
     }
 
     POSITIVE_EMOTIONS = ["happy", "excited", "playful", "affectionate", "surprised"]
@@ -307,7 +309,9 @@ class StickerSelector:
             )
             return False, "", log_entry
 
-        sticker_base = Path(__file__).parent.parent.parent.parent / "assets" / "stickers"
+        sticker_base = (
+            Path(__file__).parent.parent.parent.parent / "assets" / "stickers"
+        )
 
         available_packs = []
         for pack in sticker_packs:
